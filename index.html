@@ -393,10 +393,10 @@
             },
             canticoIntermedio: { numero: 21, titolo: "Continuiamo a cercare prima il Regno" },
             ministero: [
-                { id: 1, tipo: "Iniziare una conversazione", studente: "SOFIA ROMANO", assistente: "CHIARA GALLO", durata: 2, contesto: "DI CASA IN CASA.", punto: 1, commento: "Dovevi osservare la qualità Ama le persone. Fai discepoli - Lezione 1 - Interesse verso gli altri" },
-                { id: 2, tipo: "Iniziare una conversazione", studente: "SIMONE RIZZO", assistente: "ELENA GRECO", durata: 3, contesto: "DI CASA IN CASA. Offri un corso biblico.", punto: 5, commento: "Dovevi osservare la qualità Ama le persone. Fai discepoli - Lezione 5 - Tatto" },
-                { id: 3, tipo: "Coltivare l’interesse", studente: "MATTEO MORETTI", assistente: "FRANCESCA LEONE", durata: 3, contesto: "TESTIMONIANZA INFORMALE. Fai vedere il nostro sito a un genitore.", punto: 9, commento: "Dovevi osservare la qualità Ama le persone. Fai discepoli - Lezione 9 – Empatia" },
-                { id: 4, tipo: "Spiegare quello in cui si crede", studente: "GABRIELE MARINO", assistente: "SARA ESPOSITO", durata: 3, contesto: "Dimostrazione. Tema: Credete che la vostra sia l’unica vera religione?", punto: 4, commento: "Dovevi osservare la qualità Ama le persone. Fai discepoli - Lezione 4 – Umiltà" }
+                { id: 1, partType: 'assignment', tipo: "Iniziare una conversazione", studente: "SOFIA ROMANO", assistente: "CHIARA GALLO", durata: 2, contesto: "DI CASA IN CASA.", punto: 1, commento: "Dovevi osservare la qualità Ama le persone. Fai discepoli - Lezione 1 - Interesse verso gli altri" },
+                { id: 2, partType: 'assignment', tipo: "Iniziare una conversazione", studente: "SIMONE RIZZO", assistente: "ELENA GRECO", durata: 3, contesto: "DI CASA IN CASA. Offri un corso biblico.", punto: 5, commento: "Dovevi osservare la qualità Ama le persone. Fai discepoli - Lezione 5 - Tatto" },
+                { id: 3, partType: 'assignment', tipo: "Coltivare l’interesse", studente: "MATTEO MORETTI", assistente: "FRANCESCA LEONE", durata: 3, contesto: "TESTIMONIANZA INFORMALE. Fai vedere il nostro sito a un genitore.", punto: 9, commento: "Dovevi osservare la qualità Ama le persone. Fai discepoli - Lezione 9 – Empatia" },
+                { id: 4, partType: 'assignment', tipo: "Spiegare quello in cui si crede", studente: "GABRIELE MARINO", assistente: "SARA ESPOSITO", durata: 3, contesto: "Dimostrazione. Tema: Credete che la vostra sia l’unica vera religione?", punto: 4, commento: "Dovevi osservare la qualità Ama le persone. Fai discepoli - Lezione 4 – Umiltà" }
             ],
             vitaCristiana: [
                 { id: 1, tipo: "Parte", tema: "Affrontiamo l’instabilità economica con l’aiuto di Geova", conduttore: "DAVIDE BARBIERI", durata: 15 },
@@ -470,6 +470,22 @@
             Object.keys(source).forEach(key => {
                 if (isObject(source[key]) && key in target && isObject(target[key])) {
                      output[key] = deepMerge(target[key], source[key]);
+                } else if (Array.isArray(source[key]) && key in target && Array.isArray(target[key])) {
+                    // Gestione speciale per l'array ministero per preservare i nuovi tipi di parte
+                    if (key === 'ministero') {
+                        output[key] = source[key].map((item, index) => {
+                            if (isObject(item) && target[key][index] && isObject(target[key][index])) {
+                                return deepMerge(target[key][index], item);
+                            }
+                            return item;
+                        });
+                        // Aggiungi eventuali parti extra da source
+                        if (source[key].length > target[key].length) {
+                             output[key] = output[key].concat(source[key].slice(target[key].length));
+                        }
+                    } else {
+                         output[key] = source[key]; // Comportamento di default per altri array (sovrascrivi)
+                    }
                 } else {
                      output[key] = source[key];
                 }
@@ -540,11 +556,20 @@
         newState.programma.tesori.lettura.commento = "";
 
         // Ministero assignments
+        // Svuota l'array ministero e ripristina solo i default se necessario
+        // O semplicemente svuota i campi delle parti di default
+        newState.programma.ministero = JSON.parse(JSON.stringify(getInitialState().programma.ministero));
         newState.programma.ministero.forEach(part => {
-            part.studente = "";
-            part.assistente = "";
-            part.punto = null;
-            part.commento = "";
+            if (part.partType === 'assignment') {
+                part.studente = "";
+                part.assistente = "";
+                part.punto = null;
+                part.commento = "";
+            } else if (part.partType === 'discorso') {
+                part.oratore = "";
+                part.punto = null;
+                part.commento = "";
+            }
         });
 
         // Vita Cristiana assignments
@@ -613,22 +638,31 @@
         if (oldProgramma.tesori) newProgramma.tesori = oldProgramma.tesori;
         if (oldProgramma.vitaCristiana) newProgramma.vitaCristiana = oldProgramma.vitaCristiana;
         
-        // La sezione ministero potrebbe richiedere una mappatura più dettagliata
-        // se la struttura delle parti è cambiata significativamente.
-        // Per ora, assumiamo che la struttura sia simile.
+        // La sezione ministero ora supporta partType.
+        // I vecchi backup avevano solo 'assignment'.
         if (oldProgramma.ministero && Array.isArray(oldProgramma.ministero)) {
             newProgramma.ministero = oldProgramma.ministero.map((oldPart, index) => {
-                // Assicurati che ogni parte abbia un ID, essenziale per i timer.
-                return {
-                    id: oldPart.id || (1000 + index), // Assegna un ID di fallback
-                    tipo: oldPart.tipo || "Parte",
-                    studente: oldPart.studente || "",
-                    assistente: oldPart.assistente || "",
-                    durata: oldPart.durata || 3,
-                    contesto: oldPart.contesto || "",
-                    punto: oldPart.punto || null,
-                    commento: oldPart.commento || ""
-                };
+                // Se la parte ha 'studente', è un'esercitazione (assignment)
+                if (oldPart.hasOwnProperty('studente')) {
+                    return {
+                        id: oldPart.id || (1000 + index),
+                        partType: 'assignment', // Aggiungi il nuovo tipo
+                        tipo: oldPart.tipo || "Parte",
+                        studente: oldPart.studente || "",
+                        assistente: oldPart.assistente || "",
+                        durata: oldPart.durata || 3,
+                        contesto: oldPart.contesto || "",
+                        punto: oldPart.punto || null,
+                        commento: oldPart.commento || ""
+                    };
+                }
+                // Altrimenti, potrebbe essere un 'discorso' se è stato salvato
+                // con una versione ibrida. In caso contrario, trattalo come assignment.
+                 return {
+                    ...oldPart,
+                    partType: oldPart.partType || 'assignment', // Default a 'assignment'
+                    id: oldPart.id || (1000 + index)
+                 };
             });
         }
         
@@ -956,7 +990,15 @@
                     <div id="ministero-parts" class="p-6 space-y-6 ${state.collapsedSections.ministero ? 'hidden' : ''}">
                         ${p.ministero.map((part, index) => ministeroPartTemplate(part, index, partCounter)).join('')}
                     </div>
-                    ${!state.liveMode && !state.collapsedSections.ministero ? `<div class="p-6 border-t border-slate-200"><button id="add-ministero-part" class="flex items-center gap-2 bg-amber-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-800">${icons.plus} Aggiungi parte</button></div>` : ''}
+                    ${!state.liveMode && !state.collapsedSections.ministero ? `
+                        <div class="p-6 border-t border-slate-200 flex flex-wrap gap-3">
+                            <button id="add-ministero-assignment" class="flex items-center gap-2 bg-amber-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-800">
+                                ${icons.plus} Aggiungi Esercitazione
+                            </button>
+                            <button id="add-ministero-discorso" class="flex items-center gap-2 bg-amber-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-700">
+                                ${icons.plus} Aggiungi Discorso
+                            </button>
+                        </div>` : ''}
                 </div>
                 
                 <div class="jw-card p-6 text-center">
@@ -1034,7 +1076,21 @@
         initializeQuillEditors();
     }
     
+    /**
+     * Funzione "Router" per renderizzare la parte corretta del ministero
+     */
     function ministeroPartTemplate(part, index, baseCounter) {
+        if (part.partType === 'discorso') {
+            return ministeroDiscorsoTemplate(part, index, baseCounter);
+        }
+        // Il default è 'assignment' (esercitazione) per retrocompatibilità
+        return ministeroAssignmentTemplate(part, index, baseCounter);
+    }
+    
+    /**
+     * Template per la parte ESERCITAZIONE (Studente/Assistente)
+     */
+    function ministeroAssignmentTemplate(part, index, baseCounter) {
         const path = `programma.ministero.${index}`;
         const isFirst = index === 0;
         const partId = `ministero_${part.id}`;
@@ -1067,6 +1123,42 @@
         </div>
         `;
     }
+
+    /**
+     * Template per la parte DISCORSO nel ministero (nuova)
+     */
+    function ministeroDiscorsoTemplate(part, index, baseCounter) {
+        const path = `programma.ministero.${index}`;
+        const isFirst = index === 0;
+        const partId = `ministero_${part.id}`;
+        const isHighlighted = state.currentlyHighlighted === partId;
+        
+        return `
+        <div class="ministero-part draggable-part ${!isFirst ? 'border-t border-slate-200 pt-6' : ''} ${isHighlighted ? 'ring-2 ring-blue-500 ring-offset-2 rounded-lg' : ''} p-2 -m-2" data-index="${index}" draggable="${!state.liveMode}">
+            ${!state.liveMode ? `<span class="drag-handle">${icons.grip}</span>` : ''}
+            <div class="flex flex-wrap justify-between items-center bg-amber-50 p-2 rounded-md gap-4">
+                 <h3 class="font-bold text-lg text-amber-800 flex items-center gap-2">${highlightButton(partId)} ${baseCounter + index}. Discorso</h3>
+                 <div class="flex items-center gap-2">
+                    ${durationControl(`${path}.durata`, part.durata)}
+                    ${!state.liveMode ? `<button data-op="remove-ministero" data-index="${index}" class="text-red-500 hover:text-red-700">${icons.trash}</button>` : ''}
+                 </div>
+            </div>
+           
+            <div class="flex flex-wrap gap-4 justify-between items-center mb-2 mt-2">
+                 <div class="flex-grow">
+                    <p><span class="font-semibold">Tema:</span> ${editable(`${path}.tema`, 'Tema del discorso')}</p>
+                    <p class="mt-2"><span class="font-semibold">Oratore:</span> ${dropdown(`${path}.oratore`, state.partecipanti, part.oratore)}</p>
+                 </div>
+                 <div class="flex items-center gap-4">
+                    ${timerControl(`ministero_${part.id}`, part.durata)}
+                </div>
+            </div>
+            <div class="mt-4"><span class="font-semibold">Punto da osservare:</span> ${puntiDropdown(`${path}.punto`, state.puntiMinistero, part.punto)}</div>
+            <div class="mt-4"><p class="font-semibold mb-1">Osservazioni:</p>${simpleEditable(`${path}.commento`)}</div>
+        </div>
+        `;
+    }
+
 
     function vitaCristianaPartTemplate(part, index, baseCounter) {
         const path = `programma.vitaCristiana.${index}`;
@@ -1170,7 +1262,7 @@
                         </select>
                         <input type="text" id="new-punto-nome" placeholder="Nome breve punto (es. Lez 1)" class="w-full border border-slate-300 rounded-md p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500">
                         <textarea id="new-punto-desc" placeholder="Descrizione completa del punto" class="w-full border border-slate-300 rounded-md p-2 text-sm h-20 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
-                        <button id="add-punto-btn" class="w-full bg-indigo-600 text-white p-2 rounded-md hover:bg-indigo-700 flex items-center justify-center gap-1 shadow">${icons.plus} Aggiungi Punto</button>
+                        <button id="add-punto-btn" class="w-full bg-indigo-600 text-white p-2 rounded-md hover:bg-indigo-700 flex items-center justify-center gap-1 shadow">${icons.plus} Aggiungi Punto</Sviluppatore</button>
                       </div>
                 </div>
             </div>
@@ -1385,9 +1477,34 @@
                     return;
                 }
                 
-                if (button.id === 'add-ministero-part') {
+                // --- GESTIONE PARTI MINISTERO ---
+                if (button.id === 'add-ministero-assignment') {
                     const newId = state.programma.ministero.length ? Math.max(0, ...state.programma.ministero.map(p => p.id)) + 1 : 1;
-                    const newPart = { id: newId, tipo: "Nuova Parte", studente: "", assistente: "", durata: 3, contesto: "", punto: null, commento: "" };
+                    const newPart = { 
+                        id: newId, 
+                        partType: 'assignment', 
+                        tipo: "Nuova Esercitazione", 
+                        studente: "", 
+                        assistente: "", 
+                        durata: 3, 
+                        contesto: "", 
+                        punto: null, 
+                        commento: "" 
+                    };
+                    updateState('programma.ministero', [...state.programma.ministero, newPart]);
+                    return;
+                }
+                if (button.id === 'add-ministero-discorso') {
+                    const newId = state.programma.ministero.length ? Math.max(0, ...state.programma.ministero.map(p => p.id)) + 1 : 1;
+                    const newPart = { 
+                        id: newId, 
+                        partType: 'discorso', 
+                        tema: "Nuovo Discorso", 
+                        oratore: "", 
+                        durata: 5, 
+                        punto: null, 
+                        commento: "" 
+                    };
                     updateState('programma.ministero', [...state.programma.ministero, newPart]);
                     return;
                 }
@@ -1597,7 +1714,12 @@
             const listPath = isMinistero ? 'programma.ministero' : 'programma.vitaCristiana';
             const originalList = isMinistero ? state.programma.ministero : state.programma.vitaCristiana;
             const newOrderIndices = [...container.querySelectorAll('.draggable-part')].map(el => parseInt(el.dataset.index, 10));
-            const newList = newOrderIndices.map(originalIndex => originalList.find((item, index) => index === originalIndex));
+            
+            // Ricostruisci la lista mantenendo i dati corretti
+            const newList = newOrderIndices.map(originalIndex => {
+                return originalList.find((item, index) => index === originalIndex);
+            });
+
             let newState = JSON.parse(JSON.stringify(state));
             if (isMinistero) { newState.programma.ministero = newList; } else { newState.programma.vitaCristiana = newList; }
             state = newState;
@@ -1769,7 +1891,13 @@
                  <div style="margin-bottom: 1.5rem;">
                     <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; color: #ca8a04;">EFFICACI NEL MINISTERO</h2>
                     <div style="padding-left: 1rem; border-left: 4px solid #ca8a04;">
-                        ${p.ministero.map(part => `<p style="margin: 0.5rem 0;"><strong>${part.tipo}:</strong> ${getPartecipanteText(part.studente)} / ${getPartecipanteText(part.assistente)} - <em>${part.contesto}</em></p>`).join('')}
+                        ${p.ministero.map(part => {
+                            if (part.partType === 'discorso') {
+                                return `<p style="margin: 0.5rem 0;"><strong>Discorso:</strong> ${part.tema || '...'} (${getPartecipanteText(part.oratore)})</p>`;
+                            }
+                            // Default to assignment
+                            return `<p style="margin: 0.5rem 0;"><strong>${part.tipo}:</strong> ${getPartecipanteText(part.studente)} / ${getPartecipanteText(part.assistente)} - <em>${part.contesto}</em></p>`;
+                        }).join('')}
                     </div>
                 </div>
                 
